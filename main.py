@@ -1,20 +1,26 @@
 import requests
 from bs4 import BeautifulSoup
-import re
+import argparse
 import random
+from pprint import pprint
 
 
 def get_marca_model(placa):
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:50.0) Gecko/20100101 Firefox/50.0'}
     proxies = get_free_proxies()
 
-    page = requests.get('https://placafipe.com/placa/%s' % placa, headers=headers)
+    endpoints = ['https://www.ipvabr.com.br/placa/', 'https://placafipe.com/placa/', 'https://www.tabelafipebrasil.com/placa/', 'https://placaipva.com.br/placa/']
+
+    endpoint_idx = random.randint(0, len(endpoints) - 1)
+
+    page = requests.get(endpoints[endpoint_idx]+'%s' % placa, headers=headers)
 
     while page.status_code != 200:
         try:
             proxy_idx = random.randint(0, len(proxies) - 1)
+            
             proxy = {"http": proxies[proxy_idx], "https": proxies[proxy_idx]}
-            page = requests.get('https://placafipe.com/placa/%s' % placa, headers=headers, proxies=proxy, timeout=1)
+            page = requests.get(endpoints[endpoint_idx]+'%s' % placa, headers=headers, proxies=proxy, timeout=1)
             print(f"Proxy currently being used: {proxy['https']}")
             break
         except:
@@ -22,34 +28,19 @@ def get_marca_model(placa):
 
     soup = BeautifulSoup(page.text, 'html.parser')
 
-    tokens = soup.select('tr td')
+    car_details = dict()
 
-    marca = re.compile('Marca:')
+    for row in soup.find("table").find_all("tr"):
+        tds = row.find_all("td")
 
-    modelo = re.compile('Modelo:')
-    marca_str = None
-    modelo_str = None
+        try:
+            key = tds[0].text.strip()
+            value = tds[1].text.strip()
+            car_details[key] = value
+        except IndexError:
+            continue
 
-    for idx, token in enumerate(tokens):
-        result = marca.match(token.get_text())
-
-        if result:
-            marca_str = tokens[idx + 1].get_text()
-            break
-
-    for idx, token in enumerate(tokens):
-        result = modelo.match(token.get_text())
-
-        if result:
-            modelo_str = tokens[idx + 1].get_text()
-            break
-
-    marca_str = re.sub("[^A-Za-z0-9]+", "_", marca_str)
-
-    modelo_str_crop = modelo_str.split(' ')[:2]
-    modelo_str = '_'.join(modelo_str_crop)
-
-    return marca_str + '_' + modelo_str
+    return car_details
 
 
 def get_free_proxies():
@@ -70,5 +61,11 @@ def get_free_proxies():
 
 
 if __name__ == "__main__":
-    result = get_marca_model('jhw6773')
-    print(result)
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument("--placa", help="Placa do veiculo", type=str, required=True)
+    args = parser.parse_args()
+
+    json = get_marca_model(args.placa)
+    pprint(json)
